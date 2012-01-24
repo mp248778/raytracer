@@ -1,14 +1,18 @@
-#include <KDTreeNode.h>
-#include <AABB.h>
+#include <KDTree/KDTreeNode.h>
+#include <Math/AABB.h>
 #include <SAHBuildKDTree/TrianglesStates.h>
 #include <SAHBuildKDTree/Events.h>
-
 #include <stdio.h>
+
+#define MIN_SPLIT_NODE_COST 10.0f
 
 KDTreeNode* SAHBuildKDTree_(TrianglesStates trianglesStates, Events events, const AABB aabb)
 {
-  float splitConst;
-  Event* splitEvent = findSplitEvent(events, &splitCost);
+  float splitCost;
+  float splitPlane;
+  int splitAxis;
+  bool splitParallelLeft;
+  findSplitPlane(events, &splitCost, &splitPlane, &splitAxis, &splitParallelLeft, aabb);
 
   if (splitCost < MIN_SPLIT_NODE_COST) {
     return createLeafNode(trianglesStates, events);

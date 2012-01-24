@@ -1,3 +1,22 @@
+#include "Events.h"
+#include <Math/SAH.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef enum {
+  EventType_end,
+  EventType_parallel,
+  EventType_start,
+} EventType;
+
+struct Event {
+  struct Event* next;
+  float plane;
+  int axis;
+  EventType type;
+  uint64_t triangle;
+};
+
 void findSplitPlane(Events events, float *splitCost, float *splitPlane, int *splitAxis, bool *splitParallelLeft, const AABB aabb)
 {
   int bestAxis = -1;
@@ -8,8 +27,8 @@ void findSplitPlane(Events events, float *splitCost, float *splitPlane, int *spl
   for(int axis = 0; axis < 3; axis++) {
     uint64_t countLeft = 0;
     uint64_t countParallel = 0;
-    uint64_t countRight = events->count[axis];
-    for(Event* currentEvent = events->firstEvent[axis]; currentEvent; currentEvent = currentEvent->next) {
+    uint64_t countRight = events.count[axis];
+    for(Event* currentEvent = events.firstEvent[axis]; currentEvent; currentEvent = currentEvent->next) {
       uint64_t planeStarts = 0;
       uint64_t planeEnds = 0;
       uint64_t planeParallels = 0;
@@ -51,25 +70,46 @@ void findSplitPlane(Events events, float *splitCost, float *splitPlane, int *spl
   *splitParallelLeft = bestParallelLeft;
 }
 
-inline void swapFloats(float *a, float *b)
+static inline void swapFloats(float *a, float *b)
 {
-  t = *a;
+  float t = *a;
   *a = *b;
   *b = t;
+}
+
+static int compareEvents(const void *AEvent_, const void *BEvent_)
+{
+  const Event* AEvent = AEvent_;
+  const Event* BEvent = BEvent_;
+
+  if (AEvent->plane != BEvent->plane) {
+    if (AEvent->plane < BEvent->plane)
+      return 1;
+    else
+      return -1;
+  }
+
+  if (AEvent->type != BEvent->type)
+    return BEvent->type - AEvent->type;
+
+  if (AEvent->triangle > BEvent->triangle)
+    return 1;
+  else
+    return -1;
 }
 
 void generateEvents(Events *events, TrianglesStates trianglesStates, bool onlyTrianglesOnBothSides)
 {
   for (int axis = 0; axis < 3; axis++) {
-    Event* eventPool = malloc(sizeof(Event) * trianglesStates->count);
+    Event* eventPool = malloc(sizeof(Event) * trianglesStates.count);
     uint64_t eventIdx = 0;
-    for (uint64_t i = 0; i < trianglesStates->count; i++) {
-      if (onlyTrianglesOnBothSides && trianglesStates[i].side != TrianglesStates_Side_Both)
+    for (uint64_t i = 0; i < trianglesStates.count; i++) {
+      if (onlyTrianglesOnBothSides && trianglesStates.side[i] != TriangleState_Side_Both)
         continue;
 
-      float a = trianglesStates[i].point[0][axis];
-      float b = trianglesStates[i].point[1][axis];
-      float c = trianglesStates[i].point[2][axis];
+      float a = trianglesStates.triangles[i].vertice[0][axis];
+      float b = trianglesStates.triangles[i].vertice[1][axis];
+      float c = trianglesStates.triangles[i].vertice[2][axis];
 
       if (a < b)
         swapFloats(&a, &b);
@@ -106,7 +146,7 @@ void generateEvents(Events *events, TrianglesStates trianglesStates, bool onlyTr
     events->firstEvent[axis] = eventPool;
     events->lastEvent[axis] = &eventPool[eventIdx - 1];
     for (uint64_t i = 0; i < eventIdx - 1; i++)
-      eventPool[i]->next = &eventPool[i + 1];
+      eventPool[i].next = &eventPool[i + 1];
     events->lastEvent[axis]->next = NULL;
     events->pool = eventPool;
   }
@@ -130,17 +170,17 @@ void splitEvents(Events *leftEvents, Events *rightEvents, Events events, Triangl
   memset(rightEvents, 0, sizeof(Events));
 
   for (int axis = 0; axis < 3; axis++) {
-    Event *currentEvent = events->firstEvent[axis];
+    Event *currentEvent = events.firstEvent[axis];
     while (currentEvent) {
       Event *nextEvent = currentEvent->next;
       currentEvent->next = NULL;
 
       Events *sidedEvents;
-      switch (trianglesStates[currentEvent->triangle].side) {
-        case TrianglesStates_Side_Left:
+      switch (trianglesStates.side[currentEvent->triangle]) {
+        case TriangleState_Side_Left:
           sidedEvents = leftEvents;
           break;
-        case TrianglesStates_Side_Right:
+        case TriangleState_Side_Right:
           sidedEvents = rightEvents;
           break;
         default:
@@ -160,14 +200,14 @@ void mergeEvents(Events *events, Events newEvents)
 {
   for (int axis = 0; axis < 3; axis++) {
     if (events->firstEvent[axis])
-      events->lastEvent[axis] = events->lastEvent[axis]->next = newEvents->firstEvent[axis];
+      events->lastEvent[axis] = events->lastEvent[axis]->next = newEvents.firstEvent[axis];
     else
-      events->lastEvent[axis] = newEvents->firstEvent[axis];
+      events->lastEvent[axis] = newEvents.firstEvent[axis];
   }
 }
 
 void deinitEvents(Events events)
 {
   for (int axis = 0; axis < 3; axis++)
-    free(events->eventPool);
+    free(events.pool);
 }
