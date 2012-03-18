@@ -13,20 +13,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include <stdlib.h>
 #include <string.h>
 
-typedef enum {
-  EventType_end,
-  EventType_parallel,
-  EventType_start,
-} EventType;
-
-struct Event {
-  struct Event* next;
-  float plane;
-  int axis;
-  EventType type;
-  uint64_t triangle;
-};
-
 void findSplitPlane(Events events, float *splitCost, float *splitPlane, int *splitAxis, bool *splitParallelLeft, const AABB aabb)
 {
   int bestAxis = -1;
@@ -87,6 +73,16 @@ static inline void swapFloats(float *a, float *b)
   *b = t;
 }
 
+static void sort3Floats(float *a, float *b, float *c)
+{
+  if (*a < *b)
+    swapFloats(a, b);
+  if (*a < *c)
+    swapFloats(a, c);
+  if (*b < *c)
+    swapFloats(b, c);
+}
+
 static int compareEvents(const void *AEvent_, const void *BEvent_)
 {
   const Event* AEvent = AEvent_;
@@ -108,14 +104,100 @@ static int compareEvents(const void *AEvent_, const void *BEvent_)
     return -1;
 }
 
-void generateEvents(Events *events, TrianglesStates trianglesStates, bool onlyTrianglesOnBothSides)
+static void prepareEventsFromPool(Event *eventPool, uint64_t eventCnt)
+{
+  eventPool = realloc(eventPool, eventCnt * sizeof(Event));
+  qsort(eventPool, eventCnt, sizeof(Event), compareEvents);
+  for (uint64_t i = 0; i < eventCnt - 1; i++)
+    eventPool[i].next = &eventPool[i + 1];
+  eventPool[eventCnt - 1].next = NULL;
+}
+
+void generateSortedEventsForSplitTriangles(Events events, TrianglesStates trianglesStates, float splitPlane, int splitAxis, bool splitParallelLeft, Events* newLeftEvents, Events* newRightEvents)
 {
   for (int axis = 0; axis < 3; axis++) {
-    Event* eventPool = malloc(sizeof(Event) * trianglesStates.count);
+    Event* leftEventPool = malloc(sizeof(Event) * events.count[axis]);
+    Event* rightEventPool = malloc(sizeof(Event) * events.count[axis]);
+    uint64_t leftEventIdx = 0;
+    uint64_t rightEventIdx = 0;
+    for(Event* currentEvent = events.firstEvent[axis]; currentEvent; currentEvent = currentEvent->next) {
+      if (currentEvent->type == EventType_end)
+        continue;
+      if (trianglesStates.side[currentEvent->triangle] != TriangleState_Side_Both)
+        continue;
+
+      Triangle *t = &trianglesStates.triangles[currentEvent->triangle];
+      float a = t->vertice[0][axis];
+      float b = t->vertice[1][axis];
+      float c = t->vertice[2][axis];
+      sort3Floats(&a, &b, &c);
+      if (a == c) {
+        Event* event = NULL;
+        if (splitParallelLeft) {
+          event = &leftEventPool[leftEventIdx];
+          leftEventIdx++;
+        } else {
+          event = &rightEventPool[rightEventIdx];
+          rightEventIdx++;
+        }
+        *event = *currentEvent;
+      } else {
+        float as = t->vertice[0][splitAxis];
+        float bs = t->vertice[1][splitAxis];
+        float cs = t->vertice[2][splitAxis];
+
+        sort3Floats(&as, &bs, &cs);
+        float ratio = (splitPlane - as) / (cs - as);    //cs - as cannot be zero as the triangle is on both sides of the split plane
+        float d = as + ratio * (cs - as);
+
+        Event *event = &leftEventPool[leftEventIdx];
+        event->axis = axis;
+        event->plane = a;
+        event->triangle = currentEvent->triangle;
+        event->type = EventType_start;
+
+        event = &leftEventPool[leftEventIdx + 1];
+        event->axis = axis;
+        event->plane = d;
+        event->triangle = currentEvent->triangle;
+        event->type = EventType_end;
+        leftEventIdx += 2;
+
+        event = &rightEventPool[rightEventIdx];
+        event->axis = axis;
+        event->plane = d;
+        event->triangle = currentEvent->triangle;
+        event->type = EventType_start;
+
+        event = &rightEventPool[rightEventIdx + 1];
+        event->axis = axis;
+        event->plane = c;
+        event->triangle = currentEvent->triangle;
+        event->type = EventType_end;
+        rightEventIdx += 2;
+      }
+    }
+    prepareEventsFromPool(leftEventPool, leftEventIdx);
+    newLeftEvents->pool[axis] = leftEventPool;
+    newLeftEvents->firstEvent[axis] = leftEventPool;
+    newLeftEvents->count[axis] = leftEventIdx;
+    newLeftEvents->lastEvent[axis] = &leftEventPool[leftEventIdx - 1];
+
+    prepareEventsFromPool(rightEventPool, rightEventIdx);
+    newRightEvents->pool[axis] = rightEventPool;
+    newRightEvents->firstEvent[axis] = rightEventPool;
+    newRightEvents->count[axis] = rightEventIdx;
+    newRightEvents->lastEvent[axis] = &rightEventPool[rightEventIdx - 1];
+  }
+}
+
+
+void initSortedEvents(Events *events, TrianglesStates trianglesStates)
+{
+  for (int axis = 0; axis < 3; axis++) {
+    Event* eventPool = malloc(sizeof(Event) * trianglesStates.count * 2);
     uint64_t eventIdx = 0;
     for (uint64_t i = 0; i < trianglesStates.count; i++) {
-      if (onlyTrianglesOnBothSides && trianglesStates.side[i] != TriangleState_Side_Both)
-        continue;
 
       float a = trianglesStates.triangles[i].vertice[0][axis];
       float b = trianglesStates.triangles[i].vertice[1][axis];
@@ -134,7 +216,7 @@ void generateEvents(Events *events, TrianglesStates trianglesStates, bool onlyTr
         event->type = EventType_parallel;
         event->triangle = i;
 
-        eventIdx += 1;
+        eventIdx++;
       } else {
         Event* event = &eventPool[eventIdx];
         event->plane = a;
@@ -149,29 +231,18 @@ void generateEvents(Events *events, TrianglesStates trianglesStates, bool onlyTr
         eventIdx += 2;
       }
     }
+
     eventPool = realloc(eventPool, eventIdx * sizeof(Event));
     qsort(eventPool, eventIdx, sizeof(Event), compareEvents);
 
     events->count[axis] = eventIdx;
+    events->pool[axis] = eventPool;
     events->firstEvent[axis] = eventPool;
-    events->lastEvent[axis] = &eventPool[eventIdx - 1];
-    for (uint64_t i = 0; i < eventIdx - 1; i++)
+    events->lastEvent[axis] = &eventPool[events->count[axis] - 1];
+    for (uint64_t i = 0; i < events->count[axis] - 1; i++)
       eventPool[i].next = &eventPool[i + 1];
     events->lastEvent[axis]->next = NULL;
-    events->pool = eventPool;
   }
-}
-
-
-void generateSortedEventsForSplitTriangles(Events* events, TrianglesStates trianglesStates)
-{
-  generateEvents(events, trianglesStates, true);
-}
-
-
-void initSortedEvents(Events *events, TrianglesStates trianglesStates)
-{
-  generateEvents(events, trianglesStates, false);
 }
 
 void splitEvents(Events *leftEvents, Events *rightEvents, Events events, TrianglesStates trianglesStates)
@@ -220,4 +291,33 @@ void deinitEvents(Events events)
 {
   for (int axis = 0; axis < 3; axis++)
     free(events.pool);
+}
+
+void categorizeTriangles(TrianglesStates trianglesStates, Events events, float splitPlane, int splitAxis, bool splitParallelLeft)
+{
+  for (Event* currentEvent = events.firstEvent[splitAxis]; currentEvent; currentEvent = currentEvent->next) {
+    if (currentEvent->type == EventType_end)
+      continue;
+    trianglesStates.side[currentEvent->triangle] = TriangleState_Side_Both;
+  }
+  for (Event* currentEvent = events.firstEvent[splitAxis]; currentEvent; currentEvent = currentEvent->next) {
+    switch(currentEvent->type) {
+      case EventType_start:
+        if (currentEvent->plane > splitPlane) {
+          trianglesStates.side[currentEvent->triangle] = TriangleState_Side_Right;
+        }
+        break;
+      case EventType_end:
+        if (currentEvent->plane <= splitPlane) {
+          trianglesStates.side[currentEvent->triangle] = TriangleState_Side_Left;
+        }
+        break;
+      case EventType_parallel:
+        if (currentEvent->plane == splitPlane) {
+          trianglesStates.side[currentEvent->triangle] = splitParallelLeft ? TriangleState_Side_Left : TriangleState_Side_Right;
+        }
+        break;
+
+    }
+  }
 }

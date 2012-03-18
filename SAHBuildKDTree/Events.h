@@ -18,16 +18,30 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 typedef struct Event Event;
 
+typedef enum {
+  EventType_end,
+  EventType_parallel,
+  EventType_start,
+} EventType;
+
+struct Event {
+  Event* next;
+  float plane;
+  int axis;
+  EventType type;
+  uint64_t triangle;
+};
+
 typedef struct {
   uint64_t count[3];
   Event* firstEvent[3];
   Event* lastEvent[3];
-  void *pool;
+  void *pool[3];
 } Events;
 
 void findSplitPlane(Events events, float *splitCost, float *splitPlane, int *splitAxis, bool *splitParallelLeft, const AABB aabb);
 
-void generateSortedEventsForSplitTriangles(Events* events, TrianglesStates trianglesStates);
+void generateSortedEventsForSplitTriangles(Events events, TrianglesStates trianglesStates, float splitPlane, int splitAxis, bool splitParallelLeft, Events* newLeftEvents, Events* newRightEvents);
 
 void initSortedEvents(Events *events, TrianglesStates trianglesStates);
 
@@ -36,5 +50,7 @@ void splitEvents(Events *leftEvents, Events *rightEvents, Events events, Triangl
 void mergeEvents(Events *events, Events newEvents);
 
 void deinitEvents(Events events);
+
+void categorizeTriangles(TrianglesStates trianglesStates, Events events, float splitPlane, int splitAxis, bool splitParallelLeft);
 
 #endif

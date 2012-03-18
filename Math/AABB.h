@@ -12,10 +12,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #define Math_AABB
 
 #include "Vector.h"
+#include "Triangle.h"
 
 typedef struct {
   Vector lower;
   Vector higher;
 } AABB;
+
+void initAABB(AABB *aabb, Triangle *triangles, uint64_t trianglesCount);
+
+void splitAABB(AABB *aabb, float splitPlane, int splitAxis, AABB *leftAABB, AABB *rightAABB);
+
 
 #endif

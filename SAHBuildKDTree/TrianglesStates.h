@@ -13,6 +13,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 #include <Math/Triangle.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef enum {
   TriangleState_Side_Both,

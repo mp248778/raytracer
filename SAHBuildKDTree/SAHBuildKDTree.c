@@ -13,10 +13,45 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #include <SAHBuildKDTree/TrianglesStates.h>
 #include <SAHBuildKDTree/Events.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #define MIN_SPLIT_NODE_COST 10.0f
 
-KDTreeNode* SAHBuildKDTree_(TrianglesStates trianglesStates, Events events, const AABB aabb)
+static KDTreeNode createLeafNode(TrianglesStates trianglesStates, Events events)
+{
+  KDTreeNode leaf = calloc(1, sizeof(struct KDTreeNode));
+  leaf->axis = 3;
+
+  Triangles triangles;
+  triangles.triangle = malloc(events.count[0] * sizeof(Triangle));
+  triangles.count = 0;
+
+
+  for(Event* currentEvent = events.firstEvent[1]; currentEvent; currentEvent = currentEvent->next) {
+    if (currentEvent->type == EventType_end)
+      continue;
+    triangles.triangle[triangles.count] = trianglesStates.triangles[currentEvent->triangle];
+    triangles.count++;
+  }
+
+  triangles.triangle = realloc(triangles.triangle, triangles.count * sizeof(Triangle));
+  leaf->triangles = triangles;
+
+  return leaf;
+}
+
+static KDTreeNode createInnerNode(KDTreeNode left, KDTreeNode right, float plane, int axis)
+{
+  KDTreeNode inner = calloc(1, sizeof(struct KDTreeNode));
+  inner->axis = axis;
+  inner->plane = plane;
+  inner->left = left;
+  inner->right = right;
+
+  return inner;
+}
+
+KDTreeNode SAHBuildKDTree_(TrianglesStates trianglesStates, Events events, const AABB aabb)
 {
   float splitCost;
   float splitPlane;
@@ -28,40 +63,41 @@ KDTreeNode* SAHBuildKDTree_(TrianglesStates trianglesStates, Events events, cons
     return createLeafNode(trianglesStates, events);
   }
 
-  categorizeTriangles(trianglesStates, splitEvent);
+  categorizeTriangles(trianglesStates, events, splitPlane, splitAxis, splitParallelLeft);
 
-  Events* newLeftEvents = NULL;
-  Events* newRightEvents = NULL;
-  generateSortedEventsForSplitTriangles(&newEvents, trianglesStates);
+  Events newLeftEvents;
+  Events newRightEvents;
+  generateSortedEventsForSplitTriangles(events, trianglesStates, splitPlane, splitAxis, splitParallelLeft, &newLeftEvents, &newRightEvents);
 
-  Events leftEvents = NULL;
-  Events rightEvents = NULL;
-  TrianglesStates leftTrianglesStates
-  splitEvents(&leftEvents, &rightEvents, trianglesStates);
+  Events leftEvents;
+  Events rightEvents;
+  splitEvents(&leftEvents, &rightEvents, events, trianglesStates);
   mergeEvents(&leftEvents, newLeftEvents);
   mergeEvents(&rightEvents, newRightEvents);
 
   AABB leftAABB, rightAABB;
-  splitAABB(&aabb, splitEvent, &leftAABB, &rightAABB);
+  splitAABB(&aabb, splitPlane, splitAxis, &leftAABB, &rightAABB);
 
-  KDTreeNode* leftNode = SAHBuildKDTree_(trianglesStates, leftEvents, leftAABB);
-  KDTreeNode* rightNode = SAHBuildKDTree_(trianglesStates, rightEvents, rightAABB);
-  deinitEvents(newEvents);
-  return createInnerNode(leftNode, rightNode);
+  KDTreeNode leftNode = SAHBuildKDTree_(trianglesStates, leftEvents, leftAABB);
+  deinitEvents(newLeftEvents);
+  KDTreeNode rightNode = SAHBuildKDTree_(trianglesStates, rightEvents, rightAABB);
+  deinitEvents(newRightEvents);
+
+  return createInnerNode(leftNode, rightNode, splitPlane, splitAxis);
 }
 
 KDTreeNode* SAHBuildKDTree(const char* fileName)
 {
   FILE *file = fopen(fileName, "r");
-  TrianglesStates trianglesStates = NULL;
+  TrianglesStates trianglesStates;
   initTrianglesStates(&trianglesStates, file);
   fclose(file);
 
-  Events events = NULL;
+  Events events;
   initSortedEvents(&events, trianglesStates);
 
   AABB aabb;
-  initAABB(&aabb, trianglesStates);
+  initAABB(&aabb, trianglesStates.triangles, trianglesStates.count);
 
   KDTreeNode* root = SAHBuildKDTree_(trianglesStates, events, aabb);
 
