@@ -27,4 +27,8 @@ typedef struct {
   TriangleStateSide* side;
 } TrianglesStates;
 
+void initTrianglesStates(TrianglesStates *trianglesStates, const char* fileName);
+
+void deinitTrianglesStates(TrianglesStates *trianglesStates);
+
 #endif

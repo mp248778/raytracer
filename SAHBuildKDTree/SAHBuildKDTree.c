@@ -88,10 +88,8 @@ KDTreeNode SAHBuildKDTree_(TrianglesStates trianglesStates, Events events, const
 
 KDTreeNode* SAHBuildKDTree(const char* fileName)
 {
-  FILE *file = fopen(fileName, "r");
   TrianglesStates trianglesStates;
-  initTrianglesStates(&trianglesStates, file);
-  fclose(file);
+  initTrianglesStates(&trianglesStates, fileName);
 
   Events events;
   initSortedEvents(&events, trianglesStates);
@@ -101,7 +99,7 @@ KDTreeNode* SAHBuildKDTree(const char* fileName)
 
   KDTreeNode* root = SAHBuildKDTree_(trianglesStates, events, aabb);
 
-  deinitTrianglesStates(trianglesStates);
+  deinitTrianglesStates(&trianglesStates);
   deinitEvents(events);
 
   return root;
