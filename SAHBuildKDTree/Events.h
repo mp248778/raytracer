@@ -49,7 +49,7 @@ void splitEvents(Events *leftEvents, Events *rightEvents, Events events, Triangl
 
 void mergeEvents(Events *events, Events newEvents);
 
-void deinitEvents(Events events);
+void deinitEvents(Events* events);
 
 void categorizeTriangles(TrianglesStates trianglesStates, Events events, float splitPlane, int splitAxis, bool splitParallelLeft);
 

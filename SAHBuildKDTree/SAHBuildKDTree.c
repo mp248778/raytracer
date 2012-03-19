@@ -79,9 +79,9 @@ KDTreeNode SAHBuildKDTree_(TrianglesStates trianglesStates, Events events, const
   splitAABB(&aabb, splitPlane, splitAxis, &leftAABB, &rightAABB);
 
   KDTreeNode leftNode = SAHBuildKDTree_(trianglesStates, leftEvents, leftAABB);
-  deinitEvents(newLeftEvents);
+  deinitEvents(&newLeftEvents);
   KDTreeNode rightNode = SAHBuildKDTree_(trianglesStates, rightEvents, rightAABB);
-  deinitEvents(newRightEvents);
+  deinitEvents(&newRightEvents);
 
   return createInnerNode(leftNode, rightNode, splitPlane, splitAxis);
 }
@@ -97,10 +97,10 @@ KDTreeNode* SAHBuildKDTree(const char* fileName)
   AABB aabb;
   initAABB(&aabb, trianglesStates.triangles, trianglesStates.count);
 
-  KDTreeNode* root = SAHBuildKDTree_(trianglesStates, events, aabb);
+  KDTreeNode root = SAHBuildKDTree_(trianglesStates, events, aabb);
 
   deinitTrianglesStates(&trianglesStates);
-  deinitEvents(events);
+  deinitEvents(&events);
 
   return root;
 }

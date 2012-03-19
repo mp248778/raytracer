@@ -17,8 +17,8 @@ void findSplitPlane(Events events, float *splitCost, float *splitPlane, int *spl
 {
   int bestAxis = -1;
   float bestCost = -1;
-  bool bestParallelLeft;
-  float bestPlane;
+  bool bestParallelLeft = false;
+  float bestPlane = -1;
 
   for(int axis = 0; axis < 3; axis++) {
     uint64_t countLeft = 0;
@@ -287,10 +287,10 @@ void mergeEvents(Events *events, Events newEvents)
   }
 }
 
-void deinitEvents(Events events)
+void deinitEvents(Events* events)
 {
   for (int axis = 0; axis < 3; axis++)
-    free(events.pool);
+    free(events->pool);
 }
 
 void categorizeTriangles(TrianglesStates trianglesStates, Events events, float splitPlane, int splitAxis, bool splitParallelLeft)

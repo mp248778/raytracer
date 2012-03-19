@@ -32,7 +32,7 @@ void initAABB(AABB *aabb, Triangle *triangles, uint64_t trianglesCount)
   }
 }
 
-void splitAABB(AABB *aabb, float splitPlane, int splitAxis, AABB *leftAABB, AABB *rightAABB)
+void splitAABB(const AABB *aabb, float splitPlane, int splitAxis, AABB *leftAABB, AABB *rightAABB)
 {
   memcpy(leftAABB, aabb, sizeof(*aabb));
   memcpy(rightAABB, aabb, sizeof(*aabb));
